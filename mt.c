@@ -3,22 +3,25 @@
 #include <dirent.h>
 #include <string.h>
 
-int main() {
-  DIR *dir;
-  struct dirent *entry;
+int main(int argc, char *argv[]) {
+  const char *path = ".";
 
-  dir = opendir(".");
-  if (dir == NULL) {
+  if (argc > 1) {
+    path = argv[1];
+  }
+
+  DIR *dir = opendir(path);
+  if (!dir) {
     perror("opendir");
     return 1;
   }
 
-  while ((entry = readdir(dir)) != NULL) {
-    if (strcmp(entry->d_name,".") == 0 || strcmp(entry->d_name,"..") == 0)
+  struct dirent *entry;
+  while((entry = readdir(dir)) != NULL) {
+    if (strcmp(entry->d_name,".") == 0 || strcmp(entry->d_name,"..")==0)
       continue;
     printf("%s\n",entry->d_name);
   }
-
   closedir(dir);
   return 0;
 }
