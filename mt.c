@@ -20,13 +20,13 @@ void print_permissions(mode_t mode) {
   perms[2] = (mode & S_IWUSR) ? 'w' : '-';
   perms[3] = (mode & S_IXUSR) ? 'x' : '-';
 
-  perms[4] = (mode & S_IRUSR) ? 'r' : '-';
-  perms[5] = (mode & S_IWUSR) ? 'w' : '-';
-  perms[6] = (mode & S_IXUSR) ? 'x' : '-';
+  perms[4] = (mode & S_IRGRP) ? 'r' : '-';
+  perms[5] = (mode & S_IWGRP) ? 'w' : '-';
+  perms[6] = (mode & S_IXGRP) ? 'x' : '-';
 
-  perms[7] = (mode & S_IRUSR) ? 'r' : '-';
-  perms[8] = (mode & S_IWUSR) ? 'w' : '-';
-  perms[9] = (mode & S_IXUSR) ? 'x' : '-';
+  perms[7] = (mode & S_IROTH) ? 'r' : '-';
+  perms[8] = (mode & S_IWOTH) ? 'w' : '-';
+  perms[9] = (mode & S_IXOTH) ? 'x' : '-';
 
   perms[10] = '\0';
 
@@ -86,7 +86,10 @@ int main(int argc, char *argv[]) {
       continue;
     struct stat file_stat;
     if (long_format) {
-        if(stat(entry->d_name, &file_stat) == -1) {
+        char fullpath[1024];
+        snprintf(fullpath, sizeof(fullpath), "%s/%s", path, entry->d_name);
+
+        if(stat(fullpath, &file_stat) == -1) {
           perror("stat");
           continue;
         }
@@ -114,7 +117,15 @@ int main(int argc, char *argv[]) {
       print_colored(entry->d_name, file_stat.st_mode);
       printf("\n");
     } else {
-      printf("%s\n", entry->d_name);
+      struct stat file_stat;
+      char fullpath[1024];
+      snprintf(fullpath, sizeof(fullpath), "%s/%s", path, entry->d_name);
+
+      if(stat(fullpath, &file_stat) == 0)
+        print_colored(entry->d_name, file_stat.st_mode);
+      else 
+        printf("%s", entry->d_name);
+      printf("\n");
     }
   }
 
