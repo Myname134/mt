@@ -33,14 +33,42 @@ void print_permissions(mode_t mode) {
   printf("%s ", perms);
 }
 
+void print_human_size(long long size) {
+  const char *units[] = {"B", "K", "M", "G", "T"};
+  int i = 0;
+  double sz = (double)size;
+  while (sz >= 1024 && i < 4) {
+    sz /= 1024;
+    i++;
+  }
+  printf("%6.1f%s ", sz, units[i]);
+}
+
+void print_colored(const char *name, mode_t mode) {
+  if (S_ISDIR(mode)) {
+    printf("\033[34m%s\033[0m", name);
+  } else if (S_ISLNK(mode)) {
+    printf("\033[36m%s\033[0m", name);
+  } else if (mode & S_IXUSR) {
+    printf("\033[32m%s\033[0m", name);
+  }else {
+    printf("%s", name);
+  }
+}
 
 int long_format = 0;
+int show_hidden = 0;
+int human_readable = 0;
 int main(int argc, char *argv[]) {
   const char *path = ".";
 
   for (int i = 1; i < argc; i++) {
     if (strcmp(argv[i], "-l") == 0) {
       long_format = 1;
+    }else if(strcmp(argv[i], "-a") == 0) {
+      show_hidden = 1;
+    }else if(strcmp(argv[i], "-h") == 0){
+      human_readable = 1;
     }else {
       path = argv[i];
     }
@@ -54,10 +82,10 @@ int main(int argc, char *argv[]) {
 
   struct dirent *entry;
   while((entry = readdir(dir)) != NULL) {
-    if (strcmp(entry->d_name,".") == 0 || strcmp(entry->d_name,"..")==0) 
+    if (!show_hidden && entry->d_name[0] == '.') 
       continue;
+    struct stat file_stat;
     if (long_format) {
-        struct stat file_stat;
         if(stat(entry->d_name, &file_stat) == -1) {
           perror("stat");
           continue;
@@ -72,14 +100,19 @@ int main(int argc, char *argv[]) {
       struct group *gr = getgrgid(file_stat.st_gid);
       printf("%-8s ", gr ? gr->gr_name : "unknown");
 
-      printf("%8lld ", (long long) file_stat.st_size);
-
+      if (human_readable) {
+        print_human_size(file_stat.st_size);
+      }else {
+        printf("%8lld ", (long long) file_stat.st_size);
+      }
+      
       char timebuf[64];
       struct tm *tm_info = localtime(&file_stat.st_mtime);
       strftime(timebuf, sizeof(timebuf), "%b %d %H:%M", tm_info);
 
       printf("%s ", timebuf);
-      printf("%s\n", entry->d_name);
+      print_colored(entry->d_name, file_stat.st_mode);
+      printf("\n");
     } else {
       printf("%s\n", entry->d_name);
     }
