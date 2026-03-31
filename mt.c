@@ -56,20 +56,49 @@ void print_colored(const char *name, mode_t mode) {
   }
 }
 
+struct file_entry {
+  char name[256];
+  struct stat st;
+};
+
+int cmp_name(const void *a, const void *b){
+  struct file_entry *f1 = (struct file_entry *)a;
+  struct file_entry *f2 = (struct file_entry *)b;
+  return strcmp(f1->name, f2->name);
+}
+
+int cmp_time(const void *a, const void *b) {
+  struct file_entry *f1 = (struct file_entry *)a;
+  struct file_entry *f2 = (struct file_entry *)b;
+  return f2->st.st_mtime - f1->st.st_mtime;
+}
+
+int cmp_size(const void *a, const void *b) {
+  struct file_entry *f1 = (struct file_entry *)a;
+  struct file_entry *f2 = (struct file_entry *)b;
+  return f2->st.st_size - f1->st.st_size;
+}
+
 int long_format = 0;
 int show_hidden = 0;
 int human_readable = 0;
+int sort_time = 0;
+int sort_size = 0;
+int reverse_sort = 0;
 int main(int argc, char *argv[]) {
   const char *path = ".";
 
   for (int i = 1; i < argc; i++) {
-    if (strcmp(argv[i], "-l") == 0) {
-      long_format = 1;
-    }else if(strcmp(argv[i], "-a") == 0) {
-      show_hidden = 1;
-    }else if(strcmp(argv[i], "-h") == 0){
-      human_readable = 1;
-    }else {
+    if (argv[i][0] == '-') {
+      for (int j = 1; argv[i][j] != '\0'; j++) {
+        if (argv[i][j] == 'l') long_format = 1;
+        else if (argv[i][j] == 'a') show_hidden = 1;
+        else if (argv[i][j] == 'h') human_readable = 1;
+        else if (argv[i][j] == 't') sort_time = 1;
+        else if (argv[i][j] == 'S') sort_size = 1;
+        else if (argv[i][j] == 'r') reverse_sort = 1;
+      }
+    } else {
       path = argv[i];
     }
   }
@@ -81,50 +110,62 @@ int main(int argc, char *argv[]) {
   }
 
   struct dirent *entry;
+  struct file_entry files[1024];
+  int count = 0;
   while((entry = readdir(dir)) != NULL) {
-    if (!show_hidden && entry->d_name[0] == '.') 
+    if (!show_hidden && entry->d_name[0] == '.')
       continue;
-    struct stat file_stat;
-    if (long_format) {
-        char fullpath[1024];
-        snprintf(fullpath, sizeof(fullpath), "%s/%s", path, entry->d_name);
 
-        if(stat(fullpath, &file_stat) == -1) {
-          perror("stat");
-          continue;
-        }
-      print_permissions(file_stat.st_mode);
+    char fullpath[1024];
+    snprintf(fullpath, sizeof(fullpath), "%s/%s", path, entry->d_name);
 
-      printf("%2lu ", file_stat.st_nlink);
+    if(stat(fullpath, &files[count].st) == -1) {
+      perror("stat");
+      continue;
+    }
 
-      struct passwd *pw = getpwuid(file_stat.st_uid);
-      printf("%-8s ", pw ? pw->pw_name : "unknwon");
+    strcpy(files[count].name, entry->d_name);
+    count++;
+  }
+  if (sort_time) 
+    qsort(files, count, sizeof(struct file_entry), cmp_time);
+  else if (sort_size) 
+    qsort(files, count, sizeof(struct file_entry), cmp_size);
+  else 
+    qsort(files, count, sizeof(struct file_entry), cmp_name);
 
-      struct group *gr = getgrgid(file_stat.st_gid);
+  int start = reverse_sort ? count - 1 : 0;
+  int end = reverse_sort ? -1 : count;
+  int step = reverse_sort ? -1 : 1;
+
+  for (int i = start; i != end; i += step) {
+    struct file_entry f = files[i];
+
+    if(long_format) {
+      print_permissions(f.st.st_mode);
+
+      printf("%2lu ", f.st.st_nlink);
+
+      struct passwd *pw = getpwuid(f.st.st_uid);
+      printf("%-8s ", pw ? pw->pw_name : "unknown");
+
+      struct group *gr = getgrgid(f.st.st_gid);
       printf("%-8s ", gr ? gr->gr_name : "unknown");
 
-      if (human_readable) {
-        print_human_size(file_stat.st_size);
-      }else {
-        printf("%8lld ", (long long) file_stat.st_size);
-      }
-      
+      if(human_readable)
+        print_human_size(f.st.st_size);
+      else 
+        printf("%8lld ", (long long)f.st.st_size);
+
       char timebuf[64];
-      struct tm *tm_info = localtime(&file_stat.st_mtime);
+      struct tm *tm_info = localtime(&f.st.st_mtime);
       strftime(timebuf, sizeof(timebuf), "%b %d %H:%M", tm_info);
 
       printf("%s ", timebuf);
-      print_colored(entry->d_name, file_stat.st_mode);
+      print_colored(f.name, f.st.st_mode);
       printf("\n");
     } else {
-      struct stat file_stat;
-      char fullpath[1024];
-      snprintf(fullpath, sizeof(fullpath), "%s/%s", path, entry->d_name);
-
-      if(stat(fullpath, &file_stat) == 0)
-        print_colored(entry->d_name, file_stat.st_mode);
-      else 
-        printf("%s", entry->d_name);
+      print_colored(f.name, f.st.st_mode);
       printf("\n");
     }
   }
